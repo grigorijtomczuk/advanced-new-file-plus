@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as mkdirp from 'mkdirp';
 import { compact, startsWith, sortBy } from 'lodash';
-import * as gitignoreToGlob from 'gitignore-to-glob';
+import * as ignore from 'ignore';
 import { sync as globSync } from 'glob';
 import * as Cache from 'vscode-cache';
 import { QuickPickItem, ViewColumn } from 'vscode';
@@ -36,10 +36,6 @@ function isFolderDescriptor(filepath: string): boolean {
   return filepath.charAt(filepath.length - 1) === path.sep;
 }
 
-function invertGlob(pattern: string): string {
-  return pattern.replace(/^!/, '');
-}
-
 function walkupGitignores(dir: string, found: string[] = []): string[] {
   const gitignore = path.join(dir, '.gitignore');
   if (fs.existsSync(gitignore)) found.push(gitignore);
@@ -58,12 +54,9 @@ function flatten(memo: any[], item: any): any[] {
   return memo.concat(item);
 }
 
-function gitignoreGlobs(root: string): string[] {
-  const gitignoreFiles = walkupGitignores(root);
-  return gitignoreFiles.map(g => gitignoreToGlob(g)).reduce(flatten, []);
-}
+function buildIgnore(root: string) {
+  const ig = ignore();
 
-function configIgnoredGlobs(root: string): string[] {
   const configFilesExclude = Object.assign(
     [],
     vscode.workspace.getConfiguration('advancedNewFile').get('exclude'),
@@ -71,23 +64,28 @@ function configIgnoredGlobs(root: string): string[] {
   );
   const configIgnored = Object.keys(configFilesExclude)
     .filter(key => configFilesExclude[key] === true);
+  ig.add(configIgnored.join('\n'));
 
-  return gitignoreToGlob(configIgnored.join('\n'), { string: true });
+  const gitignoreFiles = walkupGitignores(root);
+  for (const file of gitignoreFiles) {
+    if (!fs.existsSync(file)) continue;
+    const content = fs.readFileSync(file, 'utf8');
+    ig.add(content);
+  }
+
+  return ig;
 }
 
 function directoriesSync(root: string): FSLocation[] {
-  const ignore =
-    gitignoreGlobs(root).concat(configIgnoredGlobs(root)).map(invertGlob);
+  const ig = buildIgnore(root);
 
-  const results = globSync('**', { cwd: root, ignore })
-    .map((f): FSLocation => {
-      return {
-        relative: path.join(path.sep, f),
-        absolute: path.join(root, f)
-      };
-    })
-    .filter(f => fs.statSync(f.absolute).isDirectory())
-    .map(f => f);
+  const results = globSync('**/', { cwd: root, dot: true })
+    .filter(rel => !ig.ignores(rel))
+    .map(rel => rel.slice(0, -1))
+    .map(rel => ({
+      relative: path.join(path.sep, rel),
+      absolute: path.join(root, rel)
+    }));
 
   return results;
 }
