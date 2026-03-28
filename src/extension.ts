@@ -3,7 +3,6 @@ import * as path from 'node:path';
 
 import * as braces from 'braces';
 import * as ignore from 'ignore';
-import { compact, sortBy, startsWith } from 'lodash';
 import * as mkdirp from 'mkdirp';
 import * as vscode from 'vscode';
 import { QuickPickItem, ViewColumn } from 'vscode';
@@ -111,9 +110,10 @@ function convenienceOptions(
 
   const options = config
     .map<vscode.QuickPickItem[]>((c) => optionsByName[c])
-    .reduce(flatten<QuickPickItem>);
+    .reduce(flatten<QuickPickItem>)
+    .filter(Boolean);
 
-  return compact<vscode.QuickPickItem>(options);
+  return options;
 }
 
 async function subdirOptionsForRoot(
@@ -355,9 +355,14 @@ export function sortRoots(
   roots: WorkspaceRoot[],
   desiredOrder: string[],
 ): WorkspaceRoot[] {
-  return sortBy(roots, (root) => {
-    const desiredIndex = desiredOrder.indexOf(root.rootPath);
-    return desiredIndex >= 0 ? desiredIndex : roots.length;
+  return [...roots].sort((a, b) => {
+    const aIndex = desiredOrder.indexOf(a.rootPath);
+    const bIndex = desiredOrder.indexOf(b.rootPath);
+
+    const aSort = aIndex >= 0 ? aIndex : roots.length;
+    const bSort = bIndex >= 0 ? bIndex : roots.length;
+
+    return aSort - bSort;
   });
 }
 
@@ -365,7 +370,7 @@ export function rootForDir(
   roots: WorkspaceRoot[],
   dir: DirectoryOption,
 ): WorkspaceRoot {
-  return roots.find((r) => startsWith(dir.fsLocation.absolute, r.rootPath));
+  return roots.find((r) => dir.fsLocation.absolute.startsWith(r.rootPath));
 }
 
 export async function command(context: vscode.ExtensionContext) {

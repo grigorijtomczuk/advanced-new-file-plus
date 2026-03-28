@@ -1,7 +1,7 @@
 {
   "name": "advanced-new-file-plus",
   "displayName": "advanced-new-file-plus",
-  "version": "1.4.2",
+  "version": "1.4.4",
   "description": "Create files anywhere in your workspace from the keyboard (grigorijtomczuk's fork)",
   "categories": [
     "Other"
@@ -16,6 +16,7 @@
   "scripts": {
     "compile": "tsc -watch -p ./",
     "lint": "eslint src/** test/**",
+    "package": "vsce package",
     "release": "vsce publish",
     "test": "vscode-test",
     "vscode:prepublish": "tsc -p ./"
@@ -77,7 +78,6 @@
   "dependencies": {
     "braces": "^3.0.2",
     "ignore": "^7.0.5",
-    "lodash": "^4.17.13",
     "mkdirp": "^0.5.1",
     "vscode-cache": "^0.3.0"
   },
@@ -87,7 +87,6 @@
     "@types/chai-as-promised": "0.0.29",
     "@types/chai-spies": "0.0.0",
     "@types/fs-extra": "0.0.35",
-    "@types/lodash": "4.14.52",
     "@types/mkdirp": "^0.3.29",
     "@types/mocha": "^2.2.32",
     "@types/node": "^22.19.15",
