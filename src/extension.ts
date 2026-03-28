@@ -44,7 +44,7 @@ function walkupGitignores(dir: string, found: string[] = []): string[] {
   if (!reachedSystemRoot) {
     return walkupGitignores(parentDir, found);
   } else {
-    return found;
+    return found.reverse();
   }
 }
 
@@ -78,8 +78,10 @@ function buildIgnore(root: string) {
 function directoriesSync(root: string): FSLocation[] {
   const ig = buildIgnore(root);
 
-  const results = fs
-    .globSync('**/', { cwd: root })
+  const normalFolders = fs.globSync('**/', { cwd: root });
+  const dotFolders = fs.globSync('**/.*/', { cwd: root });
+
+  const results = [...normalFolders, ...dotFolders]
     .filter((rel) => rel !== '.')
     .filter((rel) => !ig.ignores(rel + '/'))
     .map((rel) => ({
