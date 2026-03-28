@@ -1,54 +1,63 @@
+import * as fs from 'fs';
+import * as path from 'path';
+
 import * as chai from 'chai';
 import * as chaiAsPromised from 'chai-as-promised';
 import * as spies from 'chai-spies';
-import { ViewColumn } from 'vscode';
-import * as AdvancedNewFile from '../src/extension';
-import * as proxyquire from 'proxyquire';
-import * as path from 'path';
-import * as fs from 'fs';
 import { removeSync as removeDirSync } from 'fs-extra';
+import * as proxyquire from 'proxyquire';
+import { ViewColumn } from 'vscode';
+
+import * as AdvancedNewFile from '../src/extension';
 
 chai.use(chaiAsPromised);
 chai.use(spies);
 const expect = chai.expect;
 
-const mockGetConfiguration =
-  (config: Record<string, any> = { showInformationMessages: true }) => {
-    return (name) => {
-      switch (name) {
-        case 'advancedNewFile':
-          return {
-            get: (configName) => config[configName]
-          };
-        default:
-          return {};
-      }
-    };
+const mockGetConfiguration = (
+  config: Record<string, unknown> = { showInformationMessages: true },
+) => {
+  return (name) => {
+    switch (name) {
+      case 'advancedNewFile':
+        return {
+          get: (configName) => config[configName],
+        };
+      default:
+        return {};
+    }
   };
+};
 
 describe('Advanced New File', () => {
   describe('showInputBox', () => {
     it('resolves with the path to input from workspace root', async () => {
-      const advancedNewFile =
-        proxyquire('../src/extension', {
-          vscode: {
-            window: {
-              showInputBox: () => {
-                return Promise.resolve('input/path/to/file.rb');
-              }
-            }
-          }
-        }) as typeof AdvancedNewFile;
+      const advancedNewFile = proxyquire('../src/extension', {
+        vscode: {
+          window: {
+            showInputBox: () => {
+              return Promise.resolve('input/path/to/file.rb');
+            },
+          },
+        },
+      }) as typeof AdvancedNewFile;
 
-      const expectedPath =
-        path.join('/', 'base', 'dir', 'input', 'path', 'to', 'file.rb');
+      const expectedPath = path.join(
+        '/',
+        'base',
+        'dir',
+        'input',
+        'path',
+        'to',
+        'file.rb',
+      );
 
       const directory: AdvancedNewFile.DirectoryOption = {
         displayText: 'foo',
         fsLocation: {
           absolute: '/base/dir',
-          relative: '/'
-        }
+          relative: '/',
+        },
       };
 
       const result = await advancedNewFile.showInputBox(directory);
@@ -61,8 +70,8 @@ describe('Advanced New File', () => {
     const dummyProjectRoot = path.join(__dirname, 'dummy_project');
 
     it('only returns directories, prepended with /', async () => {
-      let result = await AdvancedNewFile.directories(dummyProjectRoot);
-      let relativePaths = result.map(r => r.relative);
+      const result = await AdvancedNewFile.directories(dummyProjectRoot);
+      const relativePaths = result.map((r) => r.relative);
 
       expect(relativePaths).to.include(`${path.sep}folder`);
       expect(relativePaths).not.to.include(`${path.sep}folder${path.sep}file`);
@@ -70,43 +79,52 @@ describe('Advanced New File', () => {
 
     context('with a gitignore file', () => {
       const gitignoreFile = path.join(dummyProjectRoot, '.gitignore');
-      before(() => fs.writeFileSync(gitignoreFile, [
-        'ignored/',
-        'nested-ignored/',
-        'ignored-reincludes/**',
-        '!ignored-reincludes/reincluded/'
-      ].join('\n'))
+      before(() =>
+        fs.writeFileSync(
+          gitignoreFile,
+          [
+            'ignored/',
+            'nested-ignored/',
+            'ignored-reincludes/**',
+            '!ignored-reincludes/reincluded/',
+          ].join('\n'),
+        ),
       );
       after(() => fs.unlinkSync(gitignoreFile));
 
       it('does not include gitignored directories', async () => {
-        let result = await AdvancedNewFile.directories(dummyProjectRoot);
-        let relativePaths = result.map(r => r.relative);
+        const result = await AdvancedNewFile.directories(dummyProjectRoot);
+        const relativePaths = result.map((r) => r.relative);
 
         expect(relativePaths).not.to.include(`${path.sep}ignored`);
       });
 
       it('does not include nested gitignored directories', async () => {
-        let result = await AdvancedNewFile.directories(dummyProjectRoot);
-        let relativePaths = result.map(r => r.relative);
+        const result = await AdvancedNewFile.directories(dummyProjectRoot);
+        const relativePaths = result.map((r) => r.relative);
 
-        expect(relativePaths)
-          .not.to.include(`${path.sep}folder${path.sep}nested-ignored`);
+        expect(relativePaths).not.to.include(
+          `${path.sep}folder${path.sep}nested-ignored`,
+        );
       });
 
       it('includes re-included directories via !', async () => {
-        let result = await AdvancedNewFile.directories(dummyProjectRoot);
-        let relativePaths = result.map(r => r.relative);
+        const result = await AdvancedNewFile.directories(dummyProjectRoot);
+        const relativePaths = result.map((r) => r.relative);
 
-        expect(relativePaths)
-          .to.include(`${path.sep}ignored-reincludes${path.sep}reincluded`);
+        expect(relativePaths).to.include(
+          `${path.sep}ignored-reincludes${path.sep}reincluded`,
+        );
       });
     });
 
     context('with a gitignore file in a directory above workspace root', () => {
       const testProjectRoot = path.join(dummyProjectRoot, 'folder');
-      const parentGitignoreFile =
-        path.join(testProjectRoot, '..', '.gitignore');
+      const parentGitignoreFile = path.join(
+        testProjectRoot,
+        '..',
+        '.gitignore',
+      );
       const gitignoreFile = path.join(testProjectRoot, '.gitignore');
 
       before(() => {
@@ -120,8 +138,8 @@ describe('Advanced New File', () => {
       });
 
       it('ignores as specified in both gitignore files', async () => {
-        let result = await AdvancedNewFile.directories(testProjectRoot);
-        let relativePaths = result.map(r => r.relative);
+        const result = await AdvancedNewFile.directories(testProjectRoot);
+        const relativePaths = result.map((r) => r.relative);
 
         expect(relativePaths).not.to.include(`${path.sep}nested-ignored`);
         expect(relativePaths).not.to.include(`${path.sep}nested`);
@@ -129,76 +147,74 @@ describe('Advanced New File', () => {
     });
 
     context('with vscode setting files.exclude', () => {
-      const advancedNewFile =
-        proxyquire('../src/extension', {
-          vscode: {
-            workspace: {
-              getConfiguration(name) {
-                switch (name) {
-                  case 'advancedNewFile':
-                    return {
-                      get: () => { }
-                    };
-                  default:
-                    return {
-                      'ignored/': true,
-                      'folder/': false
-                    };
-                }
+      const advancedNewFile = proxyquire('../src/extension', {
+        vscode: {
+          workspace: {
+            getConfiguration(name) {
+              switch (name) {
+                case 'advancedNewFile':
+                  return {
+                    get: () => {},
+                  };
+                default:
+                  return {
+                    'ignored/': true,
+                    'folder/': false,
+                  };
               }
-            }
-          }
-        }) as typeof AdvancedNewFile;
+            },
+          },
+        },
+      }) as typeof AdvancedNewFile;
 
       it('does not include directories with a true value', async () => {
-        let result = await advancedNewFile.directories(dummyProjectRoot);
-        let relativePaths = result.map(r => r.relative);
+        const result = await advancedNewFile.directories(dummyProjectRoot);
+        const relativePaths = result.map((r) => r.relative);
 
         expect(relativePaths).not.to.include(`${path.sep}ignored`);
       });
 
       it('includes directories with a false value', async () => {
-        let result = await advancedNewFile.directories(dummyProjectRoot);
-        let relativePaths = result.map(r => r.relative);
+        const result = await advancedNewFile.directories(dummyProjectRoot);
+        const relativePaths = result.map((r) => r.relative);
 
         expect(relativePaths).to.include(`${path.sep}folder`);
       });
     });
 
     context('with vscode setting advancedNewFile.exclude', () => {
-      const advancedNewFile =
-        proxyquire('../src/extension', {
-          vscode: {
-            workspace: {
-              getConfiguration(name) {
-                switch (name) {
-                  case 'advancedNewFile':
-                    return {
-                      get: () => {
-                        return {
-                          'ignored/': true,
-                          'folder/': false
-                        };
-                      }
-                    };
-                  default:
-                    return {};
-                }
+      const advancedNewFile = proxyquire('../src/extension', {
+        vscode: {
+          workspace: {
+            getConfiguration(name) {
+              switch (name) {
+                case 'advancedNewFile':
+                  return {
+                    get: () => {
+                      return {
+                        'ignored/': true,
+                        'folder/': false,
+                      };
+                    },
+                  };
+                default:
+                  return {};
               }
-            }
-          }
-        }) as typeof AdvancedNewFile;
+            },
+          },
+        },
+      }) as typeof AdvancedNewFile;
 
       it('does not include directories with a true value', async () => {
-        let result = await advancedNewFile.directories(dummyProjectRoot);
-        let relativePaths = result.map(r => r.relative);
+        const result = await advancedNewFile.directories(dummyProjectRoot);
+        const relativePaths = result.map((r) => r.relative);
 
         expect(relativePaths).not.to.include(`${path.sep}ignored`);
       });
 
       it('includes directories with a false value', async () => {
-        let result = await advancedNewFile.directories(dummyProjectRoot);
-        let relativePaths = result.map(r => r.relative);
+        const result = await advancedNewFile.directories(dummyProjectRoot);
+        const relativePaths = result.map((r) => r.relative);
 
         expect(relativePaths).to.include(`${path.sep}folder`);
       });
@@ -218,18 +234,19 @@ describe('Advanced New File', () => {
         it('creates any nonexistent dirs in path', () => {
           AdvancedNewFile.createFileOrFolder(newFileDescriptor);
 
-          expect(fs.statSync(path.join(tmpDir, 'path')).isDirectory())
-            .to.be.true;
+          expect(fs.statSync(path.join(tmpDir, 'path')).isDirectory()).to.be
+            .true;
 
-          expect(fs.statSync(path.join(tmpDir, 'path/to')).isDirectory())
-            .to.be.true;
+          expect(fs.statSync(path.join(tmpDir, 'path/to')).isDirectory()).to.be
+            .true;
         });
 
         it('creates an empty file', () => {
           AdvancedNewFile.createFileOrFolder(newFileDescriptor);
 
-          expect(fs.readFileSync(newFileDescriptor, { encoding: 'utf8' }))
-            .to.eq('');
+          expect(
+            fs.readFileSync(newFileDescriptor, { encoding: 'utf8' }),
+          ).to.eq('');
         });
       });
 
@@ -243,27 +260,28 @@ describe('Advanced New File', () => {
         it('does not overwrite the file', () => {
           AdvancedNewFile.createFileOrFolder(existingFileDescriptor);
 
-          expect(fs.readFileSync(existingFileDescriptor, { encoding: 'utf8' }))
-            .to.eq('existing content');
+          expect(
+            fs.readFileSync(existingFileDescriptor, { encoding: 'utf8' }),
+          ).to.eq('existing content');
         });
       });
     });
 
     context('creating folder', () => {
       context('folder does not exist', () => {
-        const newFolderDescriptor = path.join(tmpDir, 'path/to/folder') +
-          path.sep;
+        const newFolderDescriptor =
+          path.join(tmpDir, 'path/to/folder') + path.sep;
 
         afterEach(() => fs.rmdirSync(newFolderDescriptor));
 
         it('creates any nonexistent dirs in path', () => {
           AdvancedNewFile.createFileOrFolder(newFolderDescriptor);
 
-          expect(fs.statSync(path.join(tmpDir, 'path')).isDirectory())
-            .to.be.true;
+          expect(fs.statSync(path.join(tmpDir, 'path')).isDirectory()).to.be
+            .true;
 
-          expect(fs.statSync(path.join(tmpDir, 'path/to')).isDirectory())
-            .to.be.true;
+          expect(fs.statSync(path.join(tmpDir, 'path/to')).isDirectory()).to.be
+            .true;
         });
 
         it('creates a folder', () => {
@@ -278,7 +296,7 @@ describe('Advanced New File', () => {
         const existingFolderDescriptor = path.join(tmpDir, 'folder');
         const existingFileDescriptor = path.join(
           existingFolderDescriptor,
-          'file.txt'
+          'file.txt',
         );
         const newFolderDescriptor = path.join(tmpDir, 'folder') + path.sep;
 
@@ -295,35 +313,34 @@ describe('Advanced New File', () => {
           AdvancedNewFile.createFileOrFolder(newFolderDescriptor);
 
           expect(
-            fs.readFileSync(existingFileDescriptor, { encoding: 'utf8' })
-          )
-            .to.eq('existing content');
+            fs.readFileSync(existingFileDescriptor, { encoding: 'utf8' }),
+          ).to.eq('existing content');
         });
       });
     });
   });
 
   describe('openFile', () => {
-
     it('attempts to open the file', () => {
       const textDocument = 'mock document';
       const openTextDocument = chai.spy(() => Promise.resolve(textDocument));
       const showTextDocument = chai.spy();
 
-      const advancedNewFile =
-        proxyquire('../src/extension', {
-          vscode: {
-            workspace: {
-              openTextDocument,
-              getConfiguration: mockGetConfiguration()
-            },
-            window: { showTextDocument }
-          }
-        }) as typeof AdvancedNewFile;
+      const advancedNewFile = proxyquire('../src/extension', {
+        vscode: {
+          workspace: {
+            openTextDocument,
+            getConfiguration: mockGetConfiguration(),
+          },
+          window: { showTextDocument },
+        },
+      }) as typeof AdvancedNewFile;
 
       advancedNewFile.openFile('/path/to/file.ts').then(() => {
-        expect(openTextDocument)
-          .to.have.been.called.with('/path/to/file.ts', ViewColumn.Active);
+        expect(openTextDocument).to.have.been.called.with(
+          '/path/to/file.ts',
+          ViewColumn.Active,
+        );
       });
     });
 
@@ -333,16 +350,15 @@ describe('Advanced New File', () => {
         const openTextDocument = chai.spy(() => Promise.resolve(textDocument));
         const showTextDocument = chai.spy();
 
-        const advancedNewFile =
-          proxyquire('../src/extension', {
-            vscode: {
-              workspace: {
-                openTextDocument,
-                getConfiguration: mockGetConfiguration()
-              },
-              window: { showTextDocument }
-            }
-          }) as typeof AdvancedNewFile;
+        const advancedNewFile = proxyquire('../src/extension', {
+          vscode: {
+            workspace: {
+              openTextDocument,
+              getConfiguration: mockGetConfiguration(),
+            },
+            window: { showTextDocument },
+          },
+        }) as typeof AdvancedNewFile;
 
         return advancedNewFile.openFile('/path/to/file.ts').then(() => {
           expect(showTextDocument).to.have.been.called.with(textDocument);
@@ -355,18 +371,17 @@ describe('Advanced New File', () => {
         const openTextDocument = chai.spy();
         const showInformationMessage = chai.spy();
 
-        const advancedNewFile =
-          proxyquire('../src/extension', {
-            vscode: {
-              workspace: {
-                openTextDocument,
-                getConfiguration: mockGetConfiguration()
-              },
-              window: {
-                showInformationMessage
-              }
-            }
-          }) as typeof AdvancedNewFile;
+        const advancedNewFile = proxyquire('../src/extension', {
+          vscode: {
+            workspace: {
+              openTextDocument,
+              getConfiguration: mockGetConfiguration(),
+            },
+            window: {
+              showInformationMessage,
+            },
+          },
+        }) as typeof AdvancedNewFile;
 
         advancedNewFile.openFile(path.join('path/to/folder/')).then(() => {
           expect(openTextDocument).not.to.have.been.called();
@@ -377,22 +392,22 @@ describe('Advanced New File', () => {
         const openTextDocument = chai.spy();
         const showInformationMessage = chai.spy();
 
-        const advancedNewFile =
-          proxyquire('../src/extension', {
-            vscode: {
-              workspace: {
-                openTextDocument,
-                getConfiguration: mockGetConfiguration()
-              },
-              window: {
-                showInformationMessage
-              }
-            }
-          }) as typeof AdvancedNewFile;
+        const advancedNewFile = proxyquire('../src/extension', {
+          vscode: {
+            workspace: {
+              openTextDocument,
+              getConfiguration: mockGetConfiguration(),
+            },
+            window: {
+              showInformationMessage,
+            },
+          },
+        }) as typeof AdvancedNewFile;
 
         advancedNewFile.openFile(path.join('path/to/folder/')).then(() => {
-          expect(showInformationMessage).to
-            .have.been.called.with('Folder created: /path/to/folder/');
+          expect(showInformationMessage).to.have.been.called.with(
+            'Folder created: /path/to/folder/',
+          );
         });
       });
 
@@ -401,20 +416,19 @@ describe('Advanced New File', () => {
           const openTextDocument = chai.spy();
           const showInformationMessage = chai.spy();
 
-          const advancedNewFile =
-            proxyquire('../src/extension', {
-              vscode: {
-                workspace: {
-                  openTextDocument,
-                  getConfiguration: mockGetConfiguration({
-                    showInformationMessages: false
-                  })
-                },
-                window: {
-                  showInformationMessage
-                }
-              }
-            }) as typeof AdvancedNewFile;
+          const advancedNewFile = proxyquire('../src/extension', {
+            vscode: {
+              workspace: {
+                openTextDocument,
+                getConfiguration: mockGetConfiguration({
+                  showInformationMessages: false,
+                }),
+              },
+              window: {
+                showInformationMessage,
+              },
+            },
+          }) as typeof AdvancedNewFile;
 
           advancedNewFile.openFile(path.join('path/to/folder/')).then(() => {
             expect(showInformationMessage).not.to.have.been.called();
@@ -426,17 +440,21 @@ describe('Advanced New File', () => {
 
   describe('expandBraces', () => {
     context('expandBraces setting is true', () => {
-      const advancedNewFile =
-        proxyquire('../src/extension', {
-          vscode: {
-            workspace: {
-              getConfiguration: mockGetConfiguration({ expandBraces: true, showInformationMessages: true })
-            },
-          }
-        }) as typeof AdvancedNewFile;
+      const advancedNewFile = proxyquire('../src/extension', {
+        vscode: {
+          workspace: {
+            getConfiguration: mockGetConfiguration({
+              expandBraces: true,
+              showInformationMessages: true,
+            }),
+          },
+        },
+      }) as typeof AdvancedNewFile;
 
       it('expands braces to an array', () => {
-        const fileArray = advancedNewFile.expandBraces('test/{subfolder1,subfolder2}/file{1,2}.{html,ts}');
+        const fileArray = advancedNewFile.expandBraces(
+          'test/{subfolder1,subfolder2}/file{1,2}.{html,ts}',
+        );
         expect(fileArray).to.deep.eq([
           'test/subfolder1/file1.html',
           'test/subfolder1/file1.ts',
@@ -445,34 +463,32 @@ describe('Advanced New File', () => {
           'test/subfolder2/file1.html',
           'test/subfolder2/file1.ts',
           'test/subfolder2/file2.html',
-          'test/subfolder2/file2.ts'
+          'test/subfolder2/file2.ts',
         ]);
       });
 
       it('returns a single item array if there are no braces', () => {
         const fileArray = advancedNewFile.expandBraces('test/file1.html');
-        expect(fileArray).to.deep.eq([
-          'test/file1.html'
-        ]);
+        expect(fileArray).to.deep.eq(['test/file1.html']);
       });
     });
 
     context('expandBraces setting is false', () => {
-      const advancedNewFile =
-        proxyquire('../src/extension', {
-          vscode: {
-            workspace: {
-              getConfiguration: mockGetConfiguration({ expandBraces: false, showInformationMessages: true })
-            },
-          }
-        }) as typeof AdvancedNewFile;
+      const advancedNewFile = proxyquire('../src/extension', {
+        vscode: {
+          workspace: {
+            getConfiguration: mockGetConfiguration({
+              expandBraces: false,
+              showInformationMessages: true,
+            }),
+          },
+        },
+      }) as typeof AdvancedNewFile;
 
       it('returns a single item array regardless of presence of braces', () => {
         const fileArray = advancedNewFile.expandBraces('test/file{1,2}.html');
-        expect(fileArray).to.deep.eq([
-          'test/file{1,2}.html'
-        ]);
-      })
+        expect(fileArray).to.deep.eq(['test/file{1,2}.html']);
+      });
     });
   });
 
@@ -480,7 +496,7 @@ describe('Advanced New File', () => {
     context('empty cache', () => {
       it('is undefined', () => {
         const cache = {
-          has: () => false
+          has: () => false,
         };
 
         expect(AdvancedNewFile.lastSelection(cache)).to.be.undefined;
@@ -492,12 +508,12 @@ describe('Advanced New File', () => {
         displayText: 'foo',
         fsLocation: {
           absolute: '/',
-          relative: '/'
-        }
+          relative: '/',
+        },
       };
       const cache = {
         has: () => true,
-        get: () => lastSelection
+        get: () => lastSelection,
       };
 
       expect(AdvancedNewFile.lastSelection(cache)).to.eq(lastSelection);
@@ -507,14 +523,13 @@ describe('Advanced New File', () => {
   describe('currentEditorPath', () => {
     context('no active editor', () => {
       it('is undefined', () => {
-        const advancedNewFile =
-          proxyquire('../src/extension', {
-            vscode: {
-              window: {
-                activeTextEditor: undefined
-              }
-            }
-          }) as typeof AdvancedNewFile;
+        const advancedNewFile = proxyquire('../src/extension', {
+          vscode: {
+            window: {
+              activeTextEditor: undefined,
+            },
+          },
+        }) as typeof AdvancedNewFile;
 
         expect(advancedNewFile.currentEditorPath()).to.be.undefined;
       });
@@ -523,18 +538,17 @@ describe('Advanced New File', () => {
     it('returns the abssolute path to file open in active editor', () => {
       const editor = {
         document: {
-          fileName: '/foo/bar/baz/bip/file.ts'
-        }
+          fileName: '/foo/bar/baz/bip/file.ts',
+        },
       };
 
-      const advancedNewFile =
-        proxyquire('../src/extension', {
-          vscode: {
-            window: {
-              activeTextEditor: editor
-            }
-          }
-        }) as typeof AdvancedNewFile;
+      const advancedNewFile = proxyquire('../src/extension', {
+        vscode: {
+          window: {
+            activeTextEditor: editor,
+          },
+        },
+      }) as typeof AdvancedNewFile;
 
       expect(advancedNewFile.currentEditorPath()).to.eq('/foo/bar/baz/bip');
     });
@@ -545,13 +559,13 @@ describe('Advanced New File', () => {
       const fooRoot: AdvancedNewFile.WorkspaceRoot = {
         rootPath: '/foo',
         baseName: 'foo',
-        multi: true
+        multi: true,
       };
 
       const barRoot: AdvancedNewFile.WorkspaceRoot = {
         rootPath: '/bar',
         baseName: 'bar',
-        multi: true
+        multi: true,
       };
 
       const roots = [fooRoot, barRoot];
@@ -560,8 +574,8 @@ describe('Advanced New File', () => {
         displayText: 'foo',
         fsLocation: {
           relative: '/baz',
-          absolute: '/bar/baz'
-        }
+          absolute: '/bar/baz',
+        },
       };
 
       const result = AdvancedNewFile.rootForDir(roots, selectedDir);
@@ -576,13 +590,13 @@ describe('Advanced New File', () => {
         displayText: 'foo',
         fsLocation: {
           relative: '/bar',
-          absolute: '/foo/bar'
-        }
+          absolute: '/foo/bar',
+        },
       };
       const selectedRoot: AdvancedNewFile.WorkspaceRoot = {
         rootPath: '/foo',
         baseName: 'foo',
-        multi: false
+        multi: false,
       };
 
       AdvancedNewFile.cacheSelection(cache, selectedDir, selectedRoot);
@@ -597,13 +611,13 @@ describe('Advanced New File', () => {
         displayText: 'foo',
         fsLocation: {
           relative: '/bar',
-          absolute: '/foo/bar'
-        }
+          absolute: '/foo/bar',
+        },
       };
       const selectedRoot: AdvancedNewFile.WorkspaceRoot = {
         rootPath: '/bar',
         baseName: 'bar',
-        multi: true
+        multi: true,
       };
 
       AdvancedNewFile.cacheSelection(cache, selectedDir, selectedRoot);
@@ -621,21 +635,23 @@ describe('Advanced New File', () => {
           displayText: 'foo',
           fsLocation: {
             relative: '/bar',
-            absolute: '/foo/bar'
-          }
+            absolute: '/foo/bar',
+          },
         };
         const selectedRoot: AdvancedNewFile.WorkspaceRoot = {
           rootPath: '/bar',
           baseName: 'bar',
-          multi: true
+          multi: true,
         };
 
         AdvancedNewFile.cacheSelection(cache, selectedDir, selectedRoot);
 
         const newRecentRoots = ['/bar', '/foo', '/baz'];
 
-        expect(cache.put).to
-          .have.been.called.with('recentRoots', newRecentRoots);
+        expect(cache.put).to.have.been.called.with(
+          'recentRoots',
+          newRecentRoots,
+        );
       });
     });
   });
@@ -645,19 +661,19 @@ describe('Advanced New File', () => {
       const fooRoot: AdvancedNewFile.WorkspaceRoot = {
         rootPath: '/foo',
         baseName: 'foo',
-        multi: true
+        multi: true,
       };
 
       const barRoot: AdvancedNewFile.WorkspaceRoot = {
         rootPath: '/bar',
         baseName: 'bar',
-        multi: true
+        multi: true,
       };
 
       const bazRoot: AdvancedNewFile.WorkspaceRoot = {
         rootPath: '/baz',
         baseName: 'baz',
-        multi: true
+        multi: true,
       };
 
       const roots = [fooRoot, barRoot, bazRoot];
@@ -672,13 +688,13 @@ describe('Advanced New File', () => {
         const fooRoot: AdvancedNewFile.WorkspaceRoot = {
           rootPath: '/foo',
           baseName: 'foo',
-          multi: true
+          multi: true,
         };
 
         const barRoot: AdvancedNewFile.WorkspaceRoot = {
           rootPath: '/bar',
           baseName: 'bar',
-          multi: true
+          multi: true,
         };
 
         const roots = [fooRoot, barRoot];
@@ -694,25 +710,25 @@ describe('Advanced New File', () => {
         const fooRoot: AdvancedNewFile.WorkspaceRoot = {
           rootPath: '/foo',
           baseName: 'foo',
-          multi: true
+          multi: true,
         };
 
         const barRoot: AdvancedNewFile.WorkspaceRoot = {
           rootPath: '/bar',
           baseName: 'bar',
-          multi: true
+          multi: true,
         };
 
         const bazRoot: AdvancedNewFile.WorkspaceRoot = {
           rootPath: '/baz',
           baseName: 'baz',
-          multi: true
+          multi: true,
         };
 
         const bipRoot: AdvancedNewFile.WorkspaceRoot = {
           rootPath: '/bip',
           baseName: 'bip',
-          multi: true
+          multi: true,
         };
 
         const roots = [fooRoot, bazRoot, barRoot, bipRoot];
@@ -741,8 +757,8 @@ describe('Advanced New File', () => {
         displayText: selectedRelativeDir,
         fsLocation: {
           relative: selectedRelativeDir,
-          absolute: selectedAbsoluteDir
-        }
+          absolute: selectedAbsoluteDir,
+        },
       };
 
       const advancedNewFile = proxyquire('../src/extension', {
@@ -754,54 +770,59 @@ describe('Advanced New File', () => {
               switch (name) {
                 case 'advancedNewFile':
                   return {
-                    get: () => { }
+                    get: () => {},
                   };
                 default:
                   return {};
               }
-            }
+            },
           },
           window: {
             showErrorMessage,
-            showQuickPick: () => Promise.resolve({
-              label: '/path/to', option: selectedOption
-            }),
+            showQuickPick: () =>
+              Promise.resolve({
+                label: '/path/to',
+                option: selectedOption,
+              }),
             showInputBox: () => Promise.resolve('/input/path/to/file.rb'),
-            showTextDocument
-          }
+            showTextDocument,
+          },
         },
         fs: {
           statSync: () => {
             return { isDirectory: () => true };
-          }
+          },
         },
         'vscode-cache': class Cache {
-          public get() { }
-          public has() { return false; }
-          public put() { }
-        }
+          public get() {}
+          public has() {
+            return false;
+          }
+          public put() {}
+        },
       });
 
       const context = { subscriptions: [] };
 
-      const newFileDescriptor =
-        path.join(selectedAbsoluteDir, '/input/path/to/file.rb');
+      const newFileDescriptor = path.join(
+        selectedAbsoluteDir,
+        '/input/path/to/file.rb',
+      );
 
       return advancedNewFile.command(context).then(() => {
-        expect(openTextDocument)
-          .to.have.been.called.with(newFileDescriptor);
+        expect(openTextDocument).to.have.been.called.with(newFileDescriptor);
 
-        expect(showTextDocument)
-          .to.have.been.called.with(textDocument);
+        expect(showTextDocument).to.have.been.called.with(textDocument);
 
-        expect(fs.readFileSync(newFileDescriptor, { encoding: 'utf8' }))
-          .to.eq('');
+        expect(fs.readFileSync(newFileDescriptor, { encoding: 'utf8' })).to.eq(
+          '',
+        );
       });
     });
 
     it('creates a folder at given path and shows information message', () => {
       let command;
-      const registerCommand = (name, commandFn) => command = commandFn;
+      const registerCommand = (name, commandFn) => (command = commandFn);
 
       const textDocument = 'mock document';
       const openTextDocument = chai.spy(() => Promise.resolve(textDocument));
@@ -815,8 +836,8 @@ describe('Advanced New File', () => {
         displayText: selectedRelativeDir,
         fsLocation: {
           relative: selectedRelativeDir,
-          absolute: selectedAbsoluteDir
-        }
+          absolute: selectedAbsoluteDir,
+        },
       };
 
       const advancedNewFile = proxyquire('../src/extension', {
@@ -829,69 +850,75 @@ describe('Advanced New File', () => {
               switch (configName) {
                 case 'advancedNewFile':
                   return {
-                    get: (name, defaultValue) => defaultValue
+                    get: (name, defaultValue) => defaultValue,
                   };
                 default:
                   return {};
               }
-            }
+            },
           },
           window: {
             showErrorMessage,
-            showQuickPick: () => Promise.resolve({
-              label: 'path/to', option: selectedOption
-            }),
+            showQuickPick: () =>
+              Promise.resolve({
+                label: 'path/to',
+                option: selectedOption,
+              }),
             showInputBox: () => Promise.resolve('input/path/to/folder/'),
             showInformationMessage,
-            showTextDocument
-          }
+            showTextDocument,
+          },
         },
         fs: {
           statSync: () => {
             return { isDirectory: () => true };
-          }
+          },
         },
         'vscode-cache': class Cache {
-          public get() { }
-          public has() { return false; }
-          public put() { }
-        }
+          public get() {}
+          public has() {
+            return false;
+          }
+          public put() {}
+        },
       });
 
       const context = { subscriptions: [] };
 
       advancedNewFile.activate(context);
 
-      const newFolderDescriptor =
-        path.join(selectedAbsoluteDir, 'input/path/to/folder/');
+      const newFolderDescriptor = path.join(
+        selectedAbsoluteDir,
+        'input/path/to/folder/',
+      );
 
       return command().then(() => {
-        expect(openTextDocument)
-          .to.not.have.been.called.with(newFolderDescriptor);
+        expect(openTextDocument).to.not.have.been.called.with(
+          newFolderDescriptor,
+        );
 
-        expect(showTextDocument)
-          .to.not.have.been.called.with(textDocument);
+        expect(showTextDocument).to.not.have.been.called.with(textDocument);
 
-        expect(showInformationMessage)
-          .to.have.been.called.with(`Folder created: ${newFolderDescriptor}`);
+        expect(showInformationMessage).to.have.been.called.with(
+          `Folder created: ${newFolderDescriptor}`,
+        );
 
-        expect(fs.statSync(newFolderDescriptor).isDirectory())
-          .to.be.true;
+        expect(fs.statSync(newFolderDescriptor).isDirectory()).to.be.true;
       });
     });
 
     context('no project opened in workspace', () => {
       it('shows an error message', () => {
         let command;
-        const registerCommand = (name, commandFn) => command = commandFn;
+        const registerCommand = (name, commandFn) => (command = commandFn);
         const showErrorMessage = chai.spy();
 
         const advancedNewFile = proxyquire('../src/extension', {
           vscode: {
             commands: { registerCommand },
             workspace: { workspaceFolders: [] },
-            window: { showErrorMessage }
-          }
+            window: { showErrorMessage },
+          },
         });
 
         const context = { subscriptions: [] };
@@ -899,10 +926,10 @@ describe('Advanced New File', () => {
         advancedNewFile.activate(context);
         command();
 
-        expect(showErrorMessage)
-          .to.have.been.called
-          .with('It doesn\'t look like you have a folder opened in your ' +
-            'workspace. Try opening a folder first.');
+        expect(showErrorMessage).to.have.been.called.with(
+          "It doesn't look like you have a folder opened in your " +
+            'workspace. Try opening a folder first.',
+        );
       });
     });
   });
