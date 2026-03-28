@@ -5,6 +5,29 @@ files anywhere in your workspace. (grigorijtomczuk's fork)
 
 ![Demo](https://media.giphy.com/media/l3vRfRJO7ZX6WNJQs/source.gif)
 
+## Fork Improvements & Optimizations
+
+This fork introduces several enhancements and optimizations over the original extension:
+  
+- **Better handling of ignored paths**
+  
+  Thanks to [`node-ignore`](https://github.com/kaelzhang/node-ignore) the extension now faithfully follows gitignore semantics, including negation (`!`), which wasn't respected in the original version, making rules like this correctly handled:
+
+  ```
+  wp-content/*
+  !wp-content/themes/
+  ```
+
+- **Removed `lodash` dependency**
+
+  Reduced bundle size from ~1.74 MB to under 300 KB, eliminating unnecessary library bloat. All sorting and utility functions now use native JavaScript.
+  
+- **Other minor touch-ups**
+  
+  Cleanup of unused dependencies, simplified logic, and improved TypeScript typings for safer and more maintainable code.
+
+These changes make the extension lighter, faster, and more accurate when scanning workspace paths for file creation.
+
 ## Features
 
 * Fuzzy-matching autocomplete to create new file relative to existing path (thanks to
