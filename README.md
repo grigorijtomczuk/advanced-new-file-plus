@@ -1,12 +1,9 @@
-<h1>
-  <img align=left src="./icon.png" width="40px" alt="Icon">
-  Advanced New File +
-</h1>
+# <img src="./icon.png" align="left" style="width: 1.25em"> Advanced New File +
 
 Forked from VSCode's [Advanced New File](https://github.com/patbenatar/vscode-advanced-new-file)
 extension, this updated version adds the ability to create files anywhere in your workspace with keyboard.
 
-<img src="./docs/preview.gif" width="100%" alt="Demo">
+<img src="./docs/preview.gif" width="100%">
 
 ## Fork Improvements & Optimizations
 
