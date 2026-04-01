@@ -24,9 +24,15 @@ export interface DirectoryOption {
   fsLocation: FSLocation;
 }
 
+type PathValidation =
+  | { valid: true; normalized: string }
+  | { valid: false; reason: 'empty' | 'invalid' };
+
 declare module 'vscode' {
   interface QuickPickItem {
     option?: DirectoryOption;
+    invalid?: boolean;
+    directFileAbsolutePath?: string;
   }
 }
 
@@ -50,6 +56,99 @@ function walkupGitignores(dir: string, found: string[] = []): string[] {
 
 function flatten<T>(memo: T[], item: T[]): T[] {
   return memo.concat(item);
+}
+
+function isDirectFileInput(input: string): boolean {
+  const normalized = path.normalize(input);
+  const baseName = path.basename(normalized);
+  if (!normalized || normalized.endsWith(path.sep)) return false;
+  return baseName.includes('.') && baseName !== '.';
+}
+
+function validatePathInput(input: string): PathValidation {
+  if (!input.trim()) return { valid: false, reason: 'empty' };
+  const normalized = path.normalize(input);
+  const isInvalid =
+    normalized.split(path.sep).some((part) => ['.', '..'].includes(part)) ||
+    normalized === path.sep;
+  if (isInvalid) return { valid: false, reason: 'invalid' };
+  return { valid: true, normalized };
+}
+
+function buildInvalidItem(
+  reason: 'empty' | 'invalid',
+  baseDisplay?: string,
+): vscode.QuickPickItem {
+  if (reason === 'empty')
+    return {
+      label: baseDisplay,
+      detail: `Enter a filename or path to file relative to ${baseDisplay}`,
+      alwaysShow: true,
+      invalid: true,
+    };
+  return {
+    label: 'Invalid path',
+    detail: 'Enter a valid path within the workspace',
+    iconPath: new vscode.ThemeIcon('error'),
+    alwaysShow: true,
+    invalid: true,
+  };
+}
+
+function buildSyntheticItemOption(
+  input: string,
+  roots: WorkspaceRoot[],
+): DirectoryOption {
+  const normalized = path.normalize(input);
+  const options = rootOptions(roots);
+  const fallbackRoot = roots[0];
+  const fallbackRootOption = options[0];
+
+  if (fallbackRoot.multi) {
+    const parts = normalized.split(path.sep);
+    const remainder = parts.slice(1);
+    const matchedRootOption =
+      options.find((r) => r.displayText === parts[0]) || fallbackRootOption;
+    return {
+      displayText: path.join(matchedRootOption.displayText, normalized),
+      fsLocation: {
+        absolute: path.join(matchedRootOption.fsLocation.absolute, normalized),
+        relative: path.join(...remainder),
+      },
+    };
+  }
+
+  return {
+    displayText: path.join(fallbackRootOption.displayText, normalized),
+    fsLocation: {
+      absolute: path.join(fallbackRootOption.fsLocation.absolute, normalized),
+      relative: normalized,
+    },
+  };
+}
+
+function buildSyntheticItem(
+  input: string,
+  roots: WorkspaceRoot[],
+): vscode.QuickPickItem {
+  const result = validatePathInput(input);
+  if (result.valid === false) return buildInvalidItem(result.reason);
+
+  const { normalized } = result;
+  const directFile = isDirectFileInput(normalized);
+  const option = buildSyntheticItemOption(normalized, roots);
+  const icon = new vscode.ThemeIcon(directFile ? 'new-file' : 'new-folder');
+  const detail = directFile
+    ? 'Press Enter to create a new file (append "/" to create a directory instead)'
+    : 'Press Enter to create a new directory (append "." to create a file instead)';
+
+  const item = buildQuickPickItem(option, icon);
+  item.detail = detail;
+  item.alwaysShow = true;
+
+  if (directFile) item.directFileAbsolutePath = option.fsLocation.absolute;
+
+  return item;
 }
 
 function buildIgnore(root: string) {
@@ -85,8 +184,8 @@ function directoriesSync(root: string): FSLocation[] {
     .filter((rel) => rel !== '.')
     .filter((rel) => !ig.ignores(rel + '/'))
     .map((rel) => ({
-      relative: path.join(path.sep, rel),
       absolute: path.join(root, rel),
+      relative: rel,
     }));
 
   return results;
@@ -101,12 +200,26 @@ function convenienceOptions(
     .get('convenienceOptions');
 
   const optionsByName = {
-    last: [buildQuickPickItem(lastSelection(cache), '- last selection')],
+    last: [
+      buildQuickPickItem(
+        lastSelection(cache),
+        new vscode.ThemeIcon('folder-library'),
+        '— last selection',
+      ),
+    ],
     current: [
-      buildQuickPickItem(currentEditorPathOption(roots), '- current file'),
+      buildQuickPickItem(
+        currentEditorPathOption(roots),
+        new vscode.ThemeIcon('folder-active'),
+        '— current file',
+      ),
     ],
     root: rootOptions(roots).map((o) =>
-      buildQuickPickItem(o, '- workspace root'),
+      buildQuickPickItem(
+        o,
+        new vscode.ThemeIcon('root-folder'),
+        '— workspace root',
+      ),
     ),
   };
 
@@ -125,8 +238,8 @@ async function subdirOptionsForRoot(
 
   return dirs.map((dir: FSLocation): DirectoryOption => {
     const displayText = root.multi
-      ? path.join(path.sep, root.baseName, dir.relative)
-      : dir.relative;
+      ? path.join(root.baseName, dir.relative)
+      : path.join(path.sep, dir.relative);
 
     return {
       displayText,
@@ -135,27 +248,110 @@ async function subdirOptionsForRoot(
   });
 }
 
-export function showQuickPick(
+export function showBasePathQuickPick(
   choices: Promise<vscode.QuickPickItem[]>,
-): Thenable<QuickPickItem> {
-  return vscode.window.showQuickPick<vscode.QuickPickItem>(choices, {
-    placeHolder: 'Select a base directory for the new file',
+  roots: WorkspaceRoot[],
+): Thenable<vscode.QuickPickItem | undefined> {
+  const qp = vscode.window.createQuickPick<vscode.QuickPickItem>();
+
+  qp.busy = true;
+  qp.enabled = false;
+  qp.placeholder = 'Select a base directory for the new file';
+
+  qp.show();
+
+  return new Promise((resolve) => {
+    let allItems: vscode.QuickPickItem[] = [];
+
+    choices.then((items) => {
+      allItems = items;
+      qp.items = items;
+      qp.busy = false;
+      qp.enabled = true;
+    });
+
+    qp.onDidChangeValue((value) => {
+      const filteredItems = allItems.filter((item) =>
+        item.label.toLowerCase().includes(value.toLowerCase()),
+      );
+      qp.items = filteredItems.length
+        ? filteredItems
+        : [buildSyntheticItem(value, roots)];
+    });
+
+    qp.onDidAccept(() => {
+      const selection = qp.selectedItems[0];
+      if (selection.invalid) return;
+      qp.hide();
+      resolve(selection);
+    });
+
+    qp.onDidHide(() => {
+      qp.dispose();
+      resolve(undefined);
+    });
   });
 }
 
-export async function showInputBox(
+export async function showNewItemQuickPick(
   baseDirectory: DirectoryOption,
 ): Promise<string> {
-  try {
-    const input = await vscode.window.showInputBox({
-      prompt: `Relative to ${baseDirectory.displayText}`,
-      placeHolder: 'Filename or relative path to file',
+  const qp = vscode.window.createQuickPick<vscode.QuickPickItem>();
+  const baseAbsolute = baseDirectory.fsLocation.absolute;
+  const baseRelative = baseDirectory.fsLocation.relative;
+  const baseDisplay = baseDirectory.displayText;
+
+  const buildItem = (value: string): vscode.QuickPickItem => {
+    const result = validatePathInput(value);
+    if (result.valid === false)
+      return buildInvalidItem(result.reason, baseDisplay);
+
+    const { normalized } = result;
+    const isDirectoryInput = normalized.endsWith(path.sep);
+
+    const icon = new vscode.ThemeIcon(
+      isDirectoryInput ? 'new-folder' : 'new-file',
+    );
+    const option = {
+      displayText: path.join(baseDisplay, normalized),
+      fsLocation: {
+        absolute: path.join(baseAbsolute, normalized),
+        relative: path.join(baseRelative, normalized),
+      },
+    };
+
+    const item = buildQuickPickItem(option, icon);
+    item.detail = isDirectoryInput
+      ? 'Press Enter to create a new directory'
+      : 'Press Enter to create a new file (append "/" to create a directory instead)';
+    item.alwaysShow = true;
+
+    return item;
+  };
+
+  const updateItem = (value: string) => {
+    qp.items = [buildItem(value)];
+  };
+
+  updateItem('');
+  qp.placeholder = 'Filename or path to file';
+  qp.show();
+
+  return new Promise((resolve) => {
+    qp.onDidChangeValue(updateItem);
+
+    qp.onDidAccept(() => {
+      const selection = qp.selectedItems[0];
+      if (selection.invalid) return;
+      qp.hide();
+      resolve(selection.option.fsLocation.absolute);
     });
 
-    return path.join(baseDirectory.fsLocation.absolute, input);
-  } catch (e) {
-    return;
-  }
+    qp.onDidHide(() => {
+      qp.dispose();
+      resolve(undefined);
+    });
+  });
 }
 
 export function directories(root: string): Promise<FSLocation[]> {
@@ -175,12 +371,13 @@ export function directories(root: string): Promise<FSLocation[]> {
 
 export function buildQuickPickItem(
   option: DirectoryOption,
-  description: string = null,
+  icon?: vscode.ThemeIcon,
+  description?: string,
 ): vscode.QuickPickItem {
   if (!option) return;
-
   return {
     label: option.displayText,
+    iconPath: icon || new vscode.ThemeIcon('folder'),
     description,
     option,
   };
@@ -283,7 +480,7 @@ export function workspaceRoots(): WorkspaceRoot[] {
 export function rootOptions(roots: WorkspaceRoot[]): DirectoryOption[] {
   return roots.map((root): DirectoryOption => {
     return {
-      displayText: root.multi ? path.join(path.sep, root.baseName) : path.sep,
+      displayText: root.multi ? root.baseName : path.sep,
       fsLocation: {
         relative: path.sep,
         absolute: root.rootPath,
@@ -384,16 +581,21 @@ export async function command(context: vscode.ExtensionContext) {
 
     const sortedRoots = sortRoots(roots, cache.get('recentRoots') || []);
 
-    const dirSelection = await showQuickPick(
+    const dirSelection = await showBasePathQuickPick(
       dirQuickPickItems(sortedRoots, cache),
+      sortedRoots,
     );
+
     if (!dirSelection) return;
     const dir = dirSelection.option;
 
     const selectedRoot = rootForDir(roots, dir);
-    cacheSelection(cache, dir, selectedRoot);
+    if (selectedRoot && !dirSelection.directFileAbsolutePath) {
+      cacheSelection(cache, dir, selectedRoot);
+    }
 
-    const newFileInput = await showInputBox(dir);
+    const newFileInput =
+      dirSelection.directFileAbsolutePath || (await showNewItemQuickPick(dir));
     if (!newFileInput) return;
 
     const newFileArray = expandBraces(newFileInput);
@@ -403,8 +605,7 @@ export async function command(context: vscode.ExtensionContext) {
     }
   } else {
     await vscode.window.showErrorMessage(
-      "It doesn't look like you have a folder opened in your workspace. " +
-        'Try opening a folder first.',
+      "It doesn't look like you have a directory opened in your workspace. Try opening a directory first.",
     );
   }
 }

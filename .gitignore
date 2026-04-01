@@ -3,3 +3,4 @@ out/test/*.js*
 out/src/*.js*
 node_modules
 .vscode-test
+!/.vscode
