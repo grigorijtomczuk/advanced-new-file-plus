@@ -140,7 +140,7 @@ function buildSyntheticItem(
   const icon = new vscode.ThemeIcon(directFile ? 'new-file' : 'new-folder');
   const detail = directFile
     ? 'Press Enter to create a new file (append "/" to create a directory instead)'
-    : 'Press Enter to create a new directory (append "." to create a file instead)';
+    : 'This directory will be created after you specify a filename (append "." to create a file instead)';
 
   const item = buildQuickPickItem(option, icon);
   item.detail = detail;
